@@ -9,9 +9,14 @@ METAL_FILES := $(wildcard $(SRC_DIR)/*.metal)
 OBJ_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 AIR_FILES := $(patsubst $(SRC_DIR)/%.metal,$(OBJ_DIR)/%.air,$(METAL_FILES))
 
-FRAMEWORKS := -framework Foundation -framework Metal
+DBG_OPT_FLAGS=-O2
+#DBG_OPT_FLAGS=-g
+ASAN_FLAGS=
+#ASAN_FLAGS=-fsanitize=address
 
-CC=clang++ -Wall -std=c++17 -I $(INC_DIR)
+CC=clang++
+CFLAGS=-Wall -std=c++17 -I $(INC_DIR) -fno-objc-arc $(DBG_OPT_FLAGS) $(ASAN_FLAGS)
+LDFLAGS=-framework Metal -framework Foundation
 METALCC=xcrun -sdk macosx metal
 METALLD=xcrun -sdk macosx metallib
 
@@ -28,15 +33,15 @@ ${OBJ_DIR}:
 	mkdir -p ${OBJ_DIR}
 
 $(BUILD_DIR)/vecadd: ${OBJ_FILES}
-	${CC} -o $@ $^ $(FRAMEWORKS)
+	${CC} $(CFLAGS) $(LDFLAGS) -o $@ $^ $(FRAMEWORKS)
 
 $(BUILD_DIR)/default.metallib: ${AIR_FILES}
 	${METALLD} -o $@ $^
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	${CC} -c $< -o $@
+	${CC} $(CFLAGS) -c $< -o $@
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cc
-	${CC} -c $< -o $@
+	${CC} $(CFLAGS) -c $< -o $@
 $(OBJ_DIR)/%.air: $(SRC_DIR)/%.metal
 	${METALCC} -c $< -o $@
 
