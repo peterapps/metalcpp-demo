@@ -2,15 +2,22 @@
 #define MTL_PRIVATE_IMPLEMENTATION
 
 #include "Metal.hpp"
-#include "gendata.hpp"
-#include <stdio.h>
+#include <stdio.h>  // printf
+#include <stdlib.h> // srand, rand
+#include <time.h>   // time
 
 const unsigned int arrayLength = 1 << 24;
 const unsigned int bufferSize = arrayLength * sizeof(float);
 
+void generateRandomFloatData(float *arr, unsigned int n) {
+    for (unsigned long i = 0; i < n; i++) {
+        arr[i] = (float)rand() / (float)(RAND_MAX);
+    }
+}
+
 int main(int argc, char **argv) {
     // Initialize PRNG
-    seed();
+    srand(time(nullptr));
 
     // Find a GPU
     MTL::Device *device = MTL::CreateSystemDefaultDevice();
