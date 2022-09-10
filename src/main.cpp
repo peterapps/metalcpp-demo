@@ -1,10 +1,12 @@
 #define NS_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
+// #define __BLOCKS__ 1
 
-#include "Metal.hpp"
-#include <stdio.h>  // printf
-#include <stdlib.h> // srand, rand
-#include <time.h>   // time
+#include "Metal.hpp"        // NS::*, MTL::*
+#include <mach-o/getsect.h> // getsectdata
+#include <stdio.h>          // printf
+#include <stdlib.h>         // srand, rand
+#include <time.h>           // time
 
 const unsigned int arrayLength = 1 << 24;
 const unsigned int bufferSize = arrayLength * sizeof(float);
@@ -15,7 +17,17 @@ void generateRandomFloatData(float *arr, unsigned int n) {
     }
 }
 
+NS::String *cNSString(const char *cstring) {
+    return NS::String::string(cstring, NS::ASCIIStringEncoding);
+}
+
+const char *cNSError(NS::Error *error) {
+    return error->description()->cString(NS::ASCIIStringEncoding);
+}
+
 int main(int argc, char **argv) {
+    NS::Error *error = nullptr;
+
     // Initialize PRNG
     srand(time(nullptr));
 
@@ -23,26 +35,34 @@ int main(int argc, char **argv) {
     MTL::Device *device = MTL::CreateSystemDefaultDevice();
 
     // Initialize Metal objects
-    MTL::Library *defaultLibrary = device->newDefaultLibrary();
-    if (!defaultLibrary) {
-        printf("Failed to find the default library.\n");
+    MTL::Library *library;
+
+    library = device->newDefaultLibrary();
+
+    // unsigned long dataSize;
+    // char *data = getsectdata("metallib", "metallib", &dataSize);
+    // printf("Data size: %lu\n", dataSize);
+    // dispatch_data_t libraryData =
+    //     dispatch_data_create(data, dataSize, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
+    // library = device->newLibrary(libraryData, &error);
+
+    if (!library) {
+        printf("Failed to find Metal library, error %s.\n", cNSError(error));
         return 1;
     }
 
-    NS::String *functionName = NS::String::string("add_arrays", NS::ASCIIStringEncoding);
-    MTL::Function *addFunction = defaultLibrary->newFunction(functionName);
+    NS::String *functionName = cNSString("add_arrays");
+    MTL::Function *addFunction = library->newFunction(functionName);
     if (!addFunction) {
         printf("Failed to find the adder function.\n");
         return 1;
     }
 
     // Prepare a Metal pipeline
-    NS::Error *error = nullptr;
     MTL::ComputePipelineState *addFunctionPSO =
         device->newComputePipelineState(addFunction, &error);
     if (!addFunctionPSO) {
-        printf("Failed to created pipeline state object, error %s.\n",
-               error->description()->cString(NS::ASCIIStringEncoding));
+        printf("Failed to created pipeline state object, error %s.\n", cNSError(error));
         return 1;
     }
 
