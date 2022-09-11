@@ -1,12 +1,14 @@
 #define NS_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
-// #define __BLOCKS__ 1
+#define __BLOCKS__ 1 // dispatch_data_create
 
-#include "Metal.hpp"        // NS::*, MTL::*
-#include <mach-o/getsect.h> // getsectdata
-#include <stdio.h>          // printf
-#include <stdlib.h>         // srand, rand
-#include <time.h>           // time
+#include "Metal.hpp" // NS::*, MTL::*
+#include <stdio.h>   // printf
+#include <stdlib.h>  // srand, rand
+#include <time.h>    // time
+
+extern char metallib_start __asm("section$start$metallib$metallib");
+extern char metallib_end __asm("section$end$metallib$metallib");
 
 const unsigned int arrayLength = 1 << 24;
 const unsigned int bufferSize = arrayLength * sizeof(float);
@@ -35,17 +37,10 @@ int main(int argc, char **argv) {
     MTL::Device *device = MTL::CreateSystemDefaultDevice();
 
     // Initialize Metal objects
-    MTL::Library *library;
-
-    library = device->newDefaultLibrary();
-
-    // unsigned long dataSize;
-    // char *data = getsectdata("metallib", "metallib", &dataSize);
-    // printf("Data size: %lu\n", dataSize);
-    // dispatch_data_t libraryData =
-    //     dispatch_data_create(data, dataSize, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
-    // library = device->newLibrary(libraryData, &error);
-
+    char *lib = &metallib_start;
+    size_t dataSize = &metallib_end - &metallib_start;
+    dispatch_data_t data = dispatch_data_create(lib, dataSize, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
+    MTL::Library *library = device->newLibrary(data, &error);
     if (!library) {
         printf("Failed to find Metal library, error %s.\n", cNSError(error));
         return 1;
