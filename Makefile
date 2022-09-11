@@ -3,6 +3,8 @@ INC_DIR := ./inc
 OBJ_DIR := ./obj
 BUILD_DIR := ./build
 
+EXE=$(BUILD_DIR)/vecadd
+
 SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
 MTL_FILES := $(wildcard $(SRC_DIR)/*.metal)
 
@@ -23,7 +25,7 @@ MTLLD=xcrun -sdk macosx metallib
 
 .PHONY: directories
 
-all: directories $(OBJ_DIR)/default.metallib $(BUILD_DIR)/vecadd
+all: directories $(OBJ_DIR)/default.metallib $(EXE)
 
 directories: ${BUILD_DIR} ${OBJ_DIR}
 
@@ -33,7 +35,7 @@ ${BUILD_DIR}:
 ${OBJ_DIR}:
 	mkdir -p ${OBJ_DIR}
 
-$(BUILD_DIR)/vecadd: ${OBJ_FILES}
+$(EXE): ${OBJ_FILES}
 	${CC} $(CFLAGS) $(LDFLAGS) -o $@ $^ $(FRAMEWORKS)
 
 $(OBJ_DIR)/default.metallib: ${AIR_FILES}
@@ -51,10 +53,10 @@ clean:
 
 # Debugging the program
 test: all
-	$(BUILD_DIR)/vecadd
+	$(EXE)
 
 leaks: all
-	leaks -atExit -- $(BUILD_DIR)/vecadd
+	leaks -atExit -- $(EXE)
 
 autorelease: all
-	OBJC_DEBUG_MISSING_POOLS=YES leaks --autoreleasePools
+	OBJC_DEBUG_MISSING_POOLS=YES leaks --autoreleasePools -atExit -- $(EXE)

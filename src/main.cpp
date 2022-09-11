@@ -15,93 +15,94 @@ void generateRandomFloatData(float *arr, unsigned int n) {
 }
 
 int main(int argc, char **argv) {
-    NS::Error *error = nullptr;
 
-    // Initialize PRNG
     srand(time(nullptr));
 
-    // Find a GPU
-    MTL::Device *device = MTL::CreateSystemDefaultDevice();
+    // Declarations for later
+    MTL::Function *func;
+    MTL::ComputePipelineState *pso;
+    MTL::CommandBuffer *cmd;
+    MTL::ComputeCommandEncoder *enc;
 
     // Initialize Metal objects
+    NS::Error *error = nullptr;
+    MTL::Device *device = MTL::CreateSystemDefaultDevice();
     MTL::Library *library = device->newLibrary(readEmbeddedMetalLib(), &error);
-    MTL::Function *addFunction = library->newFunction(nsstr("add_arrays"));
+    MTL::CommandQueue *queue = device->newCommandQueue();
 
-    // Prepare a Metal pipeline
-    MTL::ComputePipelineState *addFunctionPSO =
-        device->newComputePipelineState(addFunction, &error);
+    // Allocate buffers and generate random data
+    unsigned int bufSize = N * sizeof(float);
+    MTL::Buffer *a_buf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
+    MTL::Buffer *b_buf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
+    MTL::Buffer *c_buf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
 
-    // Create a command queue
-    MTL::CommandQueue *commandQueue = device->newCommandQueue();
+    float *a = (float *)a_buf->contents();
+    float *b = (float *)b_buf->contents();
+    float *c = (float *)c_buf->contents();
 
-    // Create a command buffer
-    MTL::CommandBuffer *commandBuffer = commandQueue->commandBuffer();
-
-    // Create a command encoder
-    MTL::ComputeCommandEncoder *computeEncoder = commandBuffer->computeCommandEncoder();
-
-    // Create data buffers
-    const unsigned int bufSize = N * sizeof(float);
-    MTL::Buffer *aBuf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
-    MTL::Buffer *bBuf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
-    MTL::Buffer *cBuf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
-
-    float *a = (float *)aBuf->contents();
-    float *b = (float *)bBuf->contents();
-    float *c = (float *)cBuf->contents();
-
-    // Load data
     generateRandomFloatData(a, N);
     generateRandomFloatData(b, N);
 
-    // Set pipeline state and argument data
-    computeEncoder->setComputePipelineState(addFunctionPSO);
-    computeEncoder->setBuffer(aBuf, 0, 0);
-    computeEncoder->setBuffer(bBuf, 0, 1);
-    computeEncoder->setBuffer(cBuf, 0, 2);
-    computeEncoder->setBytes(&N, sizeof(N), 3);
-
-    // Encode the compute command to execute the threads
+    // Determine grid and block size
     MTL::Size gridSize(N, 1, 1);
-    printf("N = %u\n", N);
+    MTL::Size blockSize(N < 1024 ? N : 1024, 1, 1);
 
-    unsigned int threadGroupSize = addFunctionPSO->maxTotalThreadsPerThreadgroup();
-    printf("TG size: %u\n", threadGroupSize);
-    if (threadGroupSize > N) {
-        threadGroupSize = N;
-    }
-    MTL::Size tgSize(threadGroupSize, 1, 1);
+    // Execute the addition function
+    func = library->newFunction(nsstr("add_arrays"));
+    pso = device->newComputePipelineState(func, &error);
+    cmd = queue->commandBuffer();
+    enc = cmd->computeCommandEncoder();
 
-    computeEncoder->dispatchThreads(gridSize, tgSize);
+    enc->setComputePipelineState(pso);
+    enc->setBuffer(a_buf, 0, 0);
+    enc->setBuffer(b_buf, 0, 1);
+    enc->setBuffer(c_buf, 0, 2);
+    enc->setBytes(&N, sizeof(N), 3);
+    enc->dispatchThreads(gridSize, blockSize);
+    enc->endEncoding();
 
-    // End the compute pass
-    computeEncoder->endEncoding();
+    cmd->commit();
+    cmd->waitUntilCompleted();
 
-    // Commit the command buffer to execute its commands
-    commandBuffer->commit();
+    for (unsigned int i = 0; i < N; i++)
+        assert(c[i] == (a[i] + b[i]));
+    printf("Addition results are correct (%f + %f = %f)\n", a[0], b[0], c[0]);
 
-    // Wait for the calculation to complete
-    commandBuffer->waitUntilCompleted();
+    cmd->release();
+    enc->release();
+    pso->release();
+    func->release();
+    b_buf->release();
 
-    // Read the results from the buffer
-    printf("Index 0: %f + %f = %f\n", a[0], b[0], c[0]);
+    // Execute the square function
+    func = library->newFunction(nsstr("square_array"));
+    pso = device->newComputePipelineState(func, &error);
+    cmd = queue->commandBuffer();
+    enc = cmd->computeCommandEncoder();
 
-    for (unsigned long i = 0; i < N; i++) {
-        if (c[i] != (a[i] + b[i])) {
-            printf("Incorrect result: i=%lu c=%g vs %g=a+b\n", i, c[i], a[i] + b[i]);
-            assert(c[i] == (a[i] + b[i]));
-        }
-    }
-    printf("Results are correct\n");
+    enc->setComputePipelineState(pso);
+    enc->setBuffer(a_buf, 0, 0);
+    enc->setBuffer(c_buf, 0, 1);
+    enc->setBytes(&N, sizeof(N), 2);
+    enc->dispatchThreads(gridSize, blockSize);
+    enc->endEncoding();
 
-    // Free Metal objects manually
-    aBuf->release();
-    bBuf->release();
-    cBuf->release();
-    commandQueue->release();
-    commandBuffer->release();
-    addFunctionPSO->release();
-    addFunction->release();
+    cmd->commit();
+    cmd->waitUntilCompleted();
+
+    for (unsigned int i = 0; i < N; i++)
+        assert(c[i] == (a[i] * a[i]));
+    printf("Square results are correct (%f * %f = %f)\n", a[0], a[0], c[0]);
+
+    cmd->release();
+    enc->release();
+    pso->release();
+    func->release();
+    a_buf->release();
+    c_buf->release();
+
+    // Release the Metal objects from the beginning
+    queue->release();
     library->release();
     device->release();
 }
