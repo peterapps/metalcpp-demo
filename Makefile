@@ -48,3 +48,13 @@ $(OBJ_DIR)/%.air: $(SRC_DIR)/%.metal
 
 clean:
 	rm -rf $(OBJ_DIR)/* $(BUILD_DIR)/* *.dSYM
+
+# Debugging the program
+test: all
+	$(BUILD_DIR)/vecadd
+
+leaks: all
+	leaks -atExit -- $(BUILD_DIR)/vecadd
+
+autorelease: all
+	OBJC_DEBUG_MISSING_POOLS=YES leaks --autoreleasePools

@@ -94,6 +94,14 @@ int main(int argc, char **argv) {
     }
     printf("Results are correct\n");
 
-    // Release device
+    // Free Metal objects manually
+    aBuf->release();
+    bBuf->release();
+    cBuf->release();
+    commandQueue->release();
+    commandBuffer->release();
+    addFunctionPSO->release();
+    addFunction->release();
+    library->release();
     device->release();
 }
