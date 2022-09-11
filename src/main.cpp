@@ -1,14 +1,10 @@
 #define NS_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
-#define __BLOCKS__ 1 // dispatch_data_create
 
-#include "Metal.hpp" // NS::*, MTL::*
-#include <stdio.h>   // printf
-#include <stdlib.h>  // srand, rand
-#include <time.h>    // time
-
-extern char metallib_start __asm("section$start$metallib$metallib");
-extern char metallib_end __asm("section$end$metallib$metallib");
+#include "mtl_utils.hpp"
+#include <stdio.h>  // printf
+#include <stdlib.h> // srand, rand
+#include <time.h>   // time
 
 const unsigned int arrayLength = 1 << 24;
 const unsigned int bufferSize = arrayLength * sizeof(float);
@@ -17,14 +13,6 @@ void generateRandomFloatData(float *arr, unsigned int n) {
     for (unsigned long i = 0; i < n; i++) {
         arr[i] = (float)rand() / (float)(RAND_MAX);
     }
-}
-
-NS::String *cNSString(const char *cstring) {
-    return NS::String::string(cstring, NS::ASCIIStringEncoding);
-}
-
-const char *cNSError(NS::Error *error) {
-    return error->description()->cString(NS::ASCIIStringEncoding);
 }
 
 int main(int argc, char **argv) {
@@ -37,36 +25,15 @@ int main(int argc, char **argv) {
     MTL::Device *device = MTL::CreateSystemDefaultDevice();
 
     // Initialize Metal objects
-    char *lib = &metallib_start;
-    size_t dataSize = &metallib_end - &metallib_start;
-    dispatch_data_t data = dispatch_data_create(lib, dataSize, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
-    MTL::Library *library = device->newLibrary(data, &error);
-    if (!library) {
-        printf("Failed to find Metal library, error %s.\n", cNSError(error));
-        return 1;
-    }
-
-    NS::String *functionName = cNSString("add_arrays");
-    MTL::Function *addFunction = library->newFunction(functionName);
-    if (!addFunction) {
-        printf("Failed to find the adder function.\n");
-        return 1;
-    }
+    MTL::Library *library = device->newLibrary(readEmbeddedMetallib(), &error);
+    MTL::Function *addFunction = library->newFunction(nsstr("add_arrays"));
 
     // Prepare a Metal pipeline
     MTL::ComputePipelineState *addFunctionPSO =
         device->newComputePipelineState(addFunction, &error);
-    if (!addFunctionPSO) {
-        printf("Failed to created pipeline state object, error %s.\n", cNSError(error));
-        return 1;
-    }
 
     // Create a command queue
     MTL::CommandQueue *commandQueue = device->newCommandQueue();
-    if (!commandQueue) {
-        printf("Failed to find the command queue.\n");
-        return 1;
-    }
 
     // Create data buffers and load data
     MTL::Buffer *bufferA = device->newBuffer(bufferSize, MTL::ResourceStorageModeShared);
@@ -115,11 +82,10 @@ int main(int argc, char **argv) {
     float *b = (float *)bufferB->contents();
     float *result = (float *)bufferResult->contents();
 
-    for (unsigned long index = 0; index < arrayLength; index++) {
-        if (result[index] != (a[index] + b[index])) {
-            printf("Compute ERROR: index=%lu result=%g vs %g=a+b\n", index, result[index],
-                   a[index] + b[index]);
-            assert(result[index] == (a[index] + b[index]));
+    for (unsigned long i = 0; i < arrayLength; i++) {
+        if (result[i] != (a[i] + b[i])) {
+            printf("Compute ERROR: i=%lu result=%g vs %g=a+b\n", i, result[i], a[i] + b[i]);
+            assert(result[i] == (a[i] + b[i]));
         }
     }
     printf("Compute results as expected\n");
