@@ -6,8 +6,7 @@
 #include <stdlib.h> // srand, rand
 #include <time.h>   // time
 
-const unsigned int arrayLength = 1 << 24;
-const unsigned int bufferSize = arrayLength * sizeof(float);
+const unsigned int N = 1 << 24;
 
 void generateRandomFloatData(float *arr, unsigned int n) {
     for (unsigned long i = 0; i < n; i++) {
@@ -25,7 +24,7 @@ int main(int argc, char **argv) {
     MTL::Device *device = MTL::CreateSystemDefaultDevice();
 
     // Initialize Metal objects
-    MTL::Library *library = device->newLibrary(readEmbeddedMetallib(), &error);
+    MTL::Library *library = device->newLibrary(readEmbeddedMetalLib(), &error);
     MTL::Function *addFunction = library->newFunction(nsstr("add_arrays"));
 
     // Prepare a Metal pipeline
@@ -35,38 +34,45 @@ int main(int argc, char **argv) {
     // Create a command queue
     MTL::CommandQueue *commandQueue = device->newCommandQueue();
 
-    // Create data buffers and load data
-    MTL::Buffer *bufferA = device->newBuffer(bufferSize, MTL::ResourceStorageModeShared);
-    MTL::Buffer *bufferB = device->newBuffer(bufferSize, MTL::ResourceStorageModeShared);
-    MTL::Buffer *bufferResult = device->newBuffer(bufferSize, MTL::ResourceStorageModeShared);
-
-    generateRandomFloatData((float *)bufferA->contents(), arrayLength);
-    generateRandomFloatData((float *)bufferB->contents(), arrayLength);
-
     // Create a command buffer
     MTL::CommandBuffer *commandBuffer = commandQueue->commandBuffer();
 
     // Create a command encoder
     MTL::ComputeCommandEncoder *computeEncoder = commandBuffer->computeCommandEncoder();
 
+    // Create data buffers
+    const unsigned int bufSize = N * sizeof(float);
+    MTL::Buffer *aBuf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
+    MTL::Buffer *bBuf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
+    MTL::Buffer *cBuf = device->newBuffer(bufSize, MTL::ResourceStorageModeShared);
+
+    float *a = (float *)aBuf->contents();
+    float *b = (float *)bBuf->contents();
+    float *c = (float *)cBuf->contents();
+
+    // Load data
+    generateRandomFloatData(a, N);
+    generateRandomFloatData(b, N);
+
     // Set pipeline state and argument data
     computeEncoder->setComputePipelineState(addFunctionPSO);
-    computeEncoder->setBuffer(bufferA, 0, 0);
-    computeEncoder->setBuffer(bufferB, 0, 1);
-    computeEncoder->setBuffer(bufferResult, 0, 2);
-
-    // Specify thread count and organization
-    MTL::Size gridSize(arrayLength, 1, 1);
-
-    // Specify threadgroup size
-    uint threadGroupSize = addFunctionPSO->maxTotalThreadsPerThreadgroup();
-    if (threadGroupSize > arrayLength) {
-        threadGroupSize = arrayLength;
-    }
-    MTL::Size threadgroupSize(threadGroupSize, 1, 1);
+    computeEncoder->setBuffer(aBuf, 0, 0);
+    computeEncoder->setBuffer(bBuf, 0, 1);
+    computeEncoder->setBuffer(cBuf, 0, 2);
+    computeEncoder->setBytes(&N, sizeof(N), 3);
 
     // Encode the compute command to execute the threads
-    computeEncoder->dispatchThreads(gridSize, threadgroupSize);
+    MTL::Size gridSize(N, 1, 1);
+    printf("N = %u\n", N);
+
+    unsigned int threadGroupSize = addFunctionPSO->maxTotalThreadsPerThreadgroup();
+    printf("TG size: %u\n", threadGroupSize);
+    if (threadGroupSize > N) {
+        threadGroupSize = N;
+    }
+    MTL::Size tgSize(threadGroupSize, 1, 1);
+
+    computeEncoder->dispatchThreads(gridSize, tgSize);
 
     // End the compute pass
     computeEncoder->endEncoding();
@@ -78,17 +84,15 @@ int main(int argc, char **argv) {
     commandBuffer->waitUntilCompleted();
 
     // Read the results from the buffer
-    float *a = (float *)bufferA->contents();
-    float *b = (float *)bufferB->contents();
-    float *result = (float *)bufferResult->contents();
+    printf("Index 0: %f + %f = %f\n", a[0], b[0], c[0]);
 
-    for (unsigned long i = 0; i < arrayLength; i++) {
-        if (result[i] != (a[i] + b[i])) {
-            printf("Compute ERROR: i=%lu result=%g vs %g=a+b\n", i, result[i], a[i] + b[i]);
-            assert(result[i] == (a[i] + b[i]));
+    for (unsigned long i = 0; i < N; i++) {
+        if (c[i] != (a[i] + b[i])) {
+            printf("Incorrect result: i=%lu c=%g vs %g=a+b\n", i, c[i], a[i] + b[i]);
+            assert(c[i] == (a[i] + b[i]));
         }
     }
-    printf("Compute results as expected\n");
+    printf("Results are correct\n");
 
     // Release device
     device->release();

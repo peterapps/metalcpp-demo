@@ -17,7 +17,7 @@ const char *cstr(NS::Error *error) {
     return error->description()->cString(NS::ASCIIStringEncoding);
 }
 
-dispatch_data_t readEmbeddedMetallib() {
+dispatch_data_t readEmbeddedMetalLib() {
     char *data = &metallib_start;
     size_t dataSize = &metallib_end - &metallib_start;
     return dispatch_data_create(data, dataSize, NULL, DISPATCH_DATA_DESTRUCTOR_FREE);
